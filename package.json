@@ -1,0 +1,11 @@
+{
+  "name": "parse-instants",
+  "version": "1.0.0",
+  "description": "Parse the Instants Master File",
+  "main": "index.js",
+  "scripts": {
+
+  },
+  "author": "",
+  "license": "ISC"
+}
