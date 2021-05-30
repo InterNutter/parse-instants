@@ -1,9 +1,20 @@
 const fs = require('fs');
+const moment = require('moment');
+const sqlite3 = require('sqlite3').verbose();
+const db = new sqlite3.Database('story.db');
 
-let number = 0;
+db.serialize(function() {
+    db.run("CREATE TABLE IF NOT EXISTS stories (number INTEGER, year INTEGER, day INTEGER,title TEXT,prompt TEXT,content TEXT)");
+    db.run("CREATE TABLE IF NOT EXISTS tags (tag TEXT, number INTEGER)");
+});
+
+
+let number = 1;
 let year = 2013;
 let eof = false;
+let yearNumber = 1;
 
+const yearCount = {};
 const reComment = /::!--.*?--!::/sg;
 
 
@@ -15,12 +26,15 @@ if (process.argv.length < 3) {
 const filename = process.argv[2];
 
 function processStory(lines) {
-    const content = [];
     const metadata = {
-        year, number,
+        year, number, day: yearNumber,
     };
     let mode = '';
     number++;
+    yearNumber++;
+    if (!yearCount[year]) yearCount[year]=0;
+    yearCount[year]++;
+    metadata.date=moment(year, "YYYY").add(yearNumber,'days');
 
     lines.shift(); //discard the null string at the start of story data because it's a BS null string
     for (const line of lines){
@@ -33,13 +47,14 @@ function processStory(lines) {
                     metadata.story = value;
                     break;
                 case 'Title':
-                    metadata.title = value;
+                    metadata.title = value.replace(/^Challenge #\d+-\w+: /,'');
                     break;
                 case 'Prompt':
                     metadata.prompt = [value];
                     mode = 'prompt';
                     break;
                 case 'Content':
+                    metadata.content = [];
                     mode = 'content';
                     break;
                 case 'EOS':
@@ -47,6 +62,7 @@ function processStory(lines) {
                     break;
                 case 'EOY':
                     year++;
+                    yearNumber = 1;
                     break;
                 case 'EOF':
                     eof = true;
@@ -60,11 +76,22 @@ function processStory(lines) {
                 metadata.prompt.push(line);
                 break;
             case 'content':
-                content.push(line);
+                metadata.content.push(line);
                 break;
         }
     }
-    console.log(metadata,content);
+    if (!metadata.title || !metadata.prompt || !metadata.content){
+        console.log(metadata);
+    }
+    return metadata;
+}
+
+const stmt = db.prepare("INSERT INTO stories (number, year, day, title, prompt, content) VALUES (?, ?, ?, ?, ?, ?)");
+
+function addStory(metadata) {
+    db.serialize(function(){
+        stmt.run(metadata.number, metadata.year, metadata.day, metadata.title, metadata.prompt.join('\n'), metadata.content.join('\n') );
+    });
 }
 
 try {
@@ -90,7 +117,8 @@ try {
 
         // Processing the story goes here
 
-        processStory(lines);
+        const metadata = processStory(lines);
+        addStory(metadata);
 
         // break out of while loop if we are at EOF
         if (toIndex === -1) {
@@ -101,7 +129,10 @@ try {
         fromIndex = toIndex;
     }
 
+    console.log(yearCount);
 
 } catch (err) {
     console.error(err);
 }
+
+stmt.finalize();
