@@ -3,9 +3,13 @@ const sqlite3 = require('sqlite3').verbose();
 const db = new sqlite3.Database('story.db'); // these all call the libraries that do the thing
 
 db.serialize(function() {
-    db.run("CREATE TABLE IF NOT EXISTS stories (number INTEGER, year INTEGER, day INTEGER,title TEXT,prompt TEXT,content TEXT)");
+    db.run("CREATE TABLE IF NOT EXISTS stories (number INTEGER PRIMARY KEY, year INTEGER, day INTEGER,title TEXT,prompt TEXT,content TEXT)");
     //making the table of story data
-    db.run("CREATE TABLE IF NOT EXISTS tags (tag TEXT, number INTEGER)"); //making the table for tags. We will be messing with this later
+    db.run("CREATE TABLE IF NOT EXISTS tags (tag TEXT, number INTEGER, PRIMARY KEY(tag, number))");
+    db.run("CREATE INDEX IF NOT EXISTS tag_number ON tags (number)");
+    db.run("CREATE TABLE IF NOT EXISTS favourites (email TEXT, number INTEGER, PRIMARY KEY (email, number))");
+    db.run("CREATE TABLE IF NOT EXISTS settings (email TEXT, setting TEXT, value TEXT, PRIMARY KEY (email, setting))");
+
 });
 
 
@@ -38,7 +42,7 @@ function processStory(lines) {
     yearCount[year]++; //increment yearCount
 
     lines.shift(); //discard the null string at the start of story data because it's a BS null string
-    for (const line of lines){
+    for (let line of lines){
         if (line.startsWith('::')){ // look for the metadata
             const colon = line.indexOf(':', 2); // get the string that identifies the metadata
             const key = line.substring(2,colon);
@@ -77,6 +81,8 @@ function processStory(lines) {
                 metadata.prompt.push(line); // add in the prompt
                 break;
             case 'content':
+                if (line.startsWith(' ') && line.substring(2,2) !== ' ')
+                    line = line.substring(1);
                 metadata.content.push(line); // add in the content
                 break;
         }
@@ -91,7 +97,7 @@ const stmt = db.prepare("INSERT INTO stories (number, year, day, title, prompt, 
 
 function addStory(metadata) {
     db.serialize(function(){
-        stmt.run(metadata.number, metadata.year, metadata.day, metadata.title, metadata.prompt.join('\n'), metadata.content.join('\n') );
+        stmt.run(metadata.number, metadata.year, metadata.day, metadata.title, metadata.prompt.join('\n\n'), metadata.content.join('\n\n') );
         // putting all the gathered metadata into the stories database
     });
 }
